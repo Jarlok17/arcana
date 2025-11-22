@@ -4,6 +4,7 @@
 #include <memory>
 #include <random>
 #include <stdexcept>
+#include <concepts>
 
 #include "arcana/tensor/tensor_base.hpp"
 #include "arcana/tensor/tensor_methods.hpp"
@@ -97,55 +98,94 @@ namespace arcana::tensor
 
         // ============ FACTORY METHODS ============
 
+        static Tensor empty(const std::vector<size_t> &shape) { return Tensor(shape); }
         static Tensor empty(std::initializer_list<size_t> shape) { return Tensor(shape); }
 
         template <typename... Dims>
-        static Tensor empty(Dims... dims) { return Tensor(dims...); }
+            requires(std::is_integral_v<Dims> && ...)
+        static Tensor empty(Dims... dims)
+        {
+            return Tensor(dims...);
+        }
 
-        static Tensor zeros(std::initializer_list<size_t> shape)
+        // --- ZEROS ---
+        static Tensor zeros(const std::vector<size_t> &shape)
         {
             Tensor result(shape);
             std::fill_n(result.m_data, result.m_size, T(0));
             return result;
         }
 
-        template <typename... Dims>
-        static Tensor zeros(Dims... dims) { return zeros({static_cast<size_t>(dims)...}); }
+        static Tensor zeros(std::initializer_list<size_t> shape)
+        {
+            return zeros(std::vector<size_t>(shape));
+        }
 
-        static Tensor ones(std::initializer_list<size_t> shape)
+        template <typename... Dims>
+            requires(std::is_integral_v<Dims> && ...)
+        static Tensor zeros(Dims... dims)
+        {
+            return zeros({static_cast<size_t>(dims)...});
+        }
+
+        // --- ONES ---
+        static Tensor ones(const std::vector<size_t> &shape)
         {
             Tensor result(shape);
             std::fill_n(result.m_data, result.m_size, T(1));
             return result;
         }
 
-        template <typename... Dims>
-        static Tensor ones(Dims... dims) { return ones({static_cast<size_t>(dims)...}); }
-
-        template <typename... Dims>
-        static Tensor randn(Dims... dims)
+        static Tensor ones(std::initializer_list<size_t> shape)
         {
-            return randn({static_cast<size_t>(dims)...}, T(0), T(1), 0);
+            return ones(std::vector<size_t>(shape));
         }
 
-        static Tensor randn(std::initializer_list<size_t> shape, T mean = 0, T stddev = 1, uint64_t seed = 0)
+        template <typename... Dims>
+            requires(std::is_integral_v<Dims> && ...)
+        static Tensor ones(Dims... dims)
+        {
+            return ones({static_cast<size_t>(dims)...});
+        }
+
+        // --- RANDN ---
+        static Tensor randn(const std::vector<size_t> &shape, T mean = 0, T stddev = 1, uint64_t seed = 0)
         {
             Tensor result(shape);
             result.randn_(mean, stddev, seed);
             return result;
         }
 
-        template <typename... Dims>
-        static Tensor uniform(Dims... dims)
+        static Tensor randn(std::initializer_list<size_t> shape, T mean = 0, T stddev = 1, uint64_t seed = 0)
         {
-            return uniform({static_cast<size_t>(dims)...}, T(0), T(1), 0);
+            return randn(std::vector<size_t>(shape), mean, stddev, seed);
         }
 
-        static Tensor uniform(std::initializer_list<size_t> shape, T min = 0, T max = 1, uint64_t seed = 0)
+        template <typename... Dims>
+            requires(std::is_integral_v<Dims> && ...)
+        static Tensor randn(Dims... dims)
+        {
+            return randn({static_cast<size_t>(dims)...}, T(0), T(1), 0);
+        }
+
+        // --- UNIFORM ---
+        static Tensor uniform(const std::vector<size_t> &shape, T min = 0, T max = 1, uint64_t seed = 0)
         {
             Tensor result(shape);
             result.uniform_(min, max, seed);
             return result;
+        }
+
+        static Tensor uniform(std::initializer_list<size_t> shape, T min = 0, T max = 1, uint64_t seed = 0)
+        {
+            return uniform(std::vector<size_t>(shape), min, max, seed);
+        }
+
+        template <typename... Dims>
+            requires(std::is_integral_v<Dims> && ...)
+        static Tensor uniform(Dims... dims)
+        {
+            return uniform({static_cast<size_t>(dims)...}, T(0), T(1), 0);
         }
 
         // ============ FACTORY _LIKE METHODS ============
@@ -417,7 +457,7 @@ namespace arcana::tensor
 
         // ============ SHAPE OPERATIONS ============
 
-        Tensor reshape(std::initializer_list<size_t> new_shape) const
+        [[nodiscard]] Tensor reshape(std::initializer_list<size_t> new_shape) const
         {
             size_t new_size = 1;
             for (auto dim : new_shape)
@@ -431,9 +471,9 @@ namespace arcana::tensor
             return result;
         }
 
-        Tensor flatten() const { return reshape({m_size}); }
+        [[nodiscard]] Tensor flatten() const { return reshape({m_size}); }
 
-        Tensor view(std::initializer_list<size_t> new_shape) const
+        [[nodiscard]] Tensor view(std::initializer_list<size_t> new_shape) const
         {
             size_t new_size = 1;
             for (auto dim : new_shape)
@@ -454,9 +494,9 @@ namespace arcana::tensor
         }
 
         template <typename... Dims>
-        Tensor view(Dims... dims) const { return view({static_cast<size_t>(dims)...}); }
+        [[nodiscard]] Tensor view(Dims... dims) const { return view({static_cast<size_t>(dims)...}); }
 
-        Tensor transpose(size_t dim0, size_t dim1) const
+        [[nodiscard]] Tensor transpose(size_t dim0, size_t dim1) const
         {
             if (dim0 >= m_shape.size() || dim1 >= m_shape.size())
             {
@@ -487,7 +527,7 @@ namespace arcana::tensor
             return result;
         }
 
-        Tensor t() const
+        [[nodiscard]] Tensor t() const
         {
             if (m_shape.size() != 2)
             {
@@ -496,7 +536,7 @@ namespace arcana::tensor
             return transpose(0, 1);
         }
 
-        Tensor permute(std::initializer_list<size_t> order) const
+        [[nodiscard]] Tensor permute(std::initializer_list<size_t> order) const
         {
             std::vector<size_t> perm_order(order);
 
@@ -543,9 +583,9 @@ namespace arcana::tensor
         }
 
         template <typename... Dims>
-        Tensor permute(Dims... dims) { return permute({static_cast<size_t>(dims)...}); }
+        [[nodiscard]] Tensor permute(Dims... dims) { return permute({static_cast<size_t>(dims)...}); }
 
-        Tensor broadcast_to(std::initializer_list<size_t> new_shape) const
+        [[nodiscard]] Tensor broadcast_to(std::initializer_list<size_t> new_shape) const
         {
             std::vector<size_t> target_shape(new_shape);
 
@@ -584,7 +624,7 @@ namespace arcana::tensor
             return result;
         }
 
-        Tensor slice(size_t dim, size_t start, size_t end) const
+        [[nodiscard]] Tensor slice(size_t dim, size_t start, size_t end) const
         {
             if (dim >= m_shape.size())
             {
@@ -643,7 +683,7 @@ namespace arcana::tensor
             return result;
         }
 
-        Tensor squeeze(int dim = -1) const
+        [[nodiscard]] Tensor squeeze(int dim = -1) const
         {
             std::vector<size_t> new_shape;
 
@@ -681,7 +721,7 @@ namespace arcana::tensor
             return view_from_vector(new_shape);
         }
 
-        Tensor unsqueeze(size_t dim) const
+        [[nodiscard]] Tensor unsqueeze(size_t dim) const
         {
             if (dim > m_shape.size())
             {
