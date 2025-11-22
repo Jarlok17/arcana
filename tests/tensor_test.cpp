@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include "arcana/tensor/tensor.hpp"
@@ -28,7 +29,7 @@ TEST_CASE("Tensor creation", "[tensor]")
     SECTION("Ones tensor")
     {
         auto t = Tensor<float>::ones(5);
-        for (size_t i = 0; i < 5; ++i)
+        for (size_t i = 0; i < t.size(); ++i)
             REQUIRE(t(i) == 1.0f);
     }
 
@@ -45,6 +46,38 @@ TEST_CASE("Tensor creation", "[tensor]")
                     has_different = true;
         REQUIRE(has_different);
     }
+
+    SECTION("Moderate size (1000x1000)")
+    {
+        // 1 million floats ≈ 4 MB
+        REQUIRE_NOTHROW([&]
+                        {
+            auto t = Tensor<float>::zeros(1000, 1000);
+            REQUIRE(t.size() == 1'000'000);
+            REQUIRE(t(0, 0) == 0.0f);
+            REQUIRE(t(999, 999) == 0.0f); }());
+    }
+
+    SECTION("Large size (5000x5000)")
+    {
+        // 25 million floats ≈ 100 MB
+        REQUIRE_NOTHROW([&]
+                        {
+            auto t = Tensor<float>::zeros(5000, 5000);
+            REQUIRE(t.size() == 25'000'000);
+            REQUIRE(t(0, 0) == 0.0f);
+            REQUIRE(t(4999, 4999) == 0.0f); }());
+    }
+
+    /*SECTION("Very large size (10000x10000)")
+    {
+        // 100 million floats ≈ 400 MB
+        // Its may fall on some operation systems due to memory limits
+        REQUIRE_NOTHROW([&]
+                        {
+            auto t = Tensor<float>::empty(10000, 10000);
+            REQUIRE(t.size() == 100'000'000); }());
+    }*/
 }
 
 TEST_CASE("Tensor arithmetic", "[tensor][operations]")
@@ -238,6 +271,83 @@ TEST_CASE("Tensor methods", "[tensor][methods]")
         float max_val = t.max();
         float min_val = t.min();
         REQUIRE(max_val >= min_val);
+    }
+
+    SECTION("Argmax and Argmin for 1D Tensor")
+    {
+        auto t = Tensor<float>::randn(100);
+
+        auto max_idx = t.argmax();
+        auto min_idx = t.argmin();
+
+        REQUIRE(max_idx < t.size());
+        REQUIRE(min_idx < t.size());
+
+        float max_v = t.data()[max_idx];
+        float min_v = t.data()[min_idx];
+
+        REQUIRE(max_v >= min_v);
+    }
+
+    SECTION("Argmax and Argmin for 2D Tensor")
+    {
+        auto t = Tensor<float>::randn(10, 10);
+
+        auto max_idx = t.argmax(0); // shape: [10]
+        auto min_idx = t.argmin(0); // shape: [10]
+
+        REQUIRE(max_idx.shape().size() == 1);
+        REQUIRE(max_idx.shape()[0] == 10);
+
+        REQUIRE(min_idx.shape().size() == 1);
+        REQUIRE(min_idx.shape()[0] == 10);
+
+        for (size_t j = 0; j < 10; ++j)
+        {
+            auto max_i = static_cast<size_t>(max_idx(j));
+            auto min_i = static_cast<size_t>(min_idx(j));
+
+            REQUIRE(max_i < 10);
+            REQUIRE(min_i < 10);
+
+            float max_val = t(max_i, j);
+            float min_val = t(min_i, j);
+
+            REQUIRE(max_val >= min_val);
+        }
+    }
+
+    SECTION("Argmax and Argmin for 3D Tensor")
+    {
+        auto t = Tensor<float>::randn(5, 10, 20);
+
+        auto max_idx = t.argmax(1); // shape: [5, 20]
+        auto min_idx = t.argmin(1); // shape: [5, 20]
+
+        REQUIRE(max_idx.shape().size() == 2);
+        REQUIRE(max_idx.shape()[0] == 5);
+        REQUIRE(max_idx.shape()[1] == 20);
+
+        REQUIRE(min_idx.shape().size() == 2);
+        REQUIRE(min_idx.shape()[0] == 5);
+        REQUIRE(min_idx.shape()[1] == 20);
+
+        for (size_t b = 0; b < 5; ++b)
+        {
+            for (size_t k = 0; k < 20; ++k)
+            {
+                auto max_i = static_cast<size_t>(max_idx(b, k));
+                auto min_i = static_cast<size_t>(min_idx(b, k));
+
+                REQUIRE(max_i < 10);
+                REQUIRE(min_i < 10);
+
+                float max_val = t(b, max_i, k);
+                float min_val = t(b, min_i, k);
+
+                REQUIRE(max_val >= min_val);
+            }
+        }
     }
 
     SECTION("Exp")
