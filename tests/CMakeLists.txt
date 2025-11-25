@@ -11,6 +11,7 @@ FetchContent_MakeAvailable(Catch2)
 
 add_executable(arcana_tests
     tensor_test.cpp
+    static_tensor_test.cpp
 )
 
 target_link_libraries(arcana_tests PRIVATE

@@ -141,6 +141,51 @@ t.tanh_();         // In-place Tanh version
 
 > *Note: Use in-place operations to save memory during training (The Grind).*
 
+### 💎 The Static Form (Crystallized Potential)
+While the standard Tensor is fluid and chaotic, the StaticTensor is rigid and orderly. It represents Fate — a path chosen before execution begins.
+
+Use StaticTensor when dimensions are known at compile-time (e.g., Convolution kernels, small transformation matrices, physics vectors).
+#### Benefits:
+* ⚡ Zero Allocation: Lives on the stack (no new/malloc).
+* 🛡️ True Foresight: Dimension mismatches are caught by the compiler (Compile-Time Errors), not at runtime.
+* 🚀 Speed: Compiler can unroll loops and optimize aggressively.
+
+#### Invocation
+The shape is part of the soul (Type), not just the body.
+```c++
+// A 3x3 matrix, shape is fixed in the stars (templates)
+auto kernel = StaticTensor<float, 3, 3>::randn();
+
+// A 4D vector on the stack
+auto vec = StaticTensor<float, 4>::zeros();
+```
+
+#### The Law of Equivalent Exchange (Reshape)
+You cannot change the total mass of the soul, only its form. And you must prove it to the compiler.
+
+```c++
+auto t = StaticTensor<float, 4, 4>::ones(); // 16 elements
+
+// ✅ Valid: 16 -> 8x2. Known at compile time.
+auto reshaped = t.reshape<8, 2>(); 
+
+// ❌ Compilation Error: 16 != 15. The universe forbids this.
+// auto broken = t.reshape<3, 5>();
+```
+
+#### Operations
+Standard arithmetic works the same, but matmul requires strict adherence to dimensional laws.
+```c++
+auto A = StaticTensor<float, 2, 3>::randn();
+auto B = StaticTensor<float, 3, 4>::randn();
+
+// Result is automatically StaticTensor<float, 2, 4>
+auto C = A.matmul(B); 
+
+// ❌ Compilation Error: (2,3) @ (5,4). Inner dims (3 != 5) mismatch.
+// auto D = A.matmul(StaticTensor<float, 5, 4>::randn());
+```
+
 ## ⚠️ Warning (The Dark Hour)
 
 > *The Arcana is the means by which all is revealed...*
@@ -151,11 +196,11 @@ However, tread carefully.
 
 ## 🔗 Social Link Status
 
-| Status      | Description                                                    |
-| :---------- | :------------------------------------------------------------- |
-| **Reverse** | Not implemented. Matrix multiplication is slow (Naive O(N^3)). |
-| **Upright** | **Current State.** Functional. Parallelized with OpenMP.       |
-| **Broken**  | Memory leaks. (Hopefully fixed).                               |
+| Status      | Description                                                              |
+| :---------- | :----------------------------------------------------------------------- |
+| **Reverse** | Performance can be improved. (Tiled, but not BLAS-level optimized yet).. |
+| **Upright** | **Current State.** Functional. Parallelized with OpenMP.                 |
+| **Broken**  | Memory leaks. (Hopefully fixed).                                         |
 
 ---
 
@@ -163,12 +208,14 @@ However, tread carefully.
 
 To witness the true power of the Tensor in action, consult the ancient scrolls (unit tests). They contain the proven techniques and battle scenarios.
 
-*   **Main Test Suite:** [`tests/tensor_test.cpp`](../../tests/tensor_test.cpp)
-    *   *Creation & Initialization*
-    *   *Arithmetic Operations*
-    *   *Broadcasting Logic*
-    *   *Reduction & Aggregation*
-    *   *Operations with scalar*
+- **Dynamic Tensor Test Suite:** [`tests/tensor_test.cpp`](../../tests/tensor_test.cpp)  
+  - *Creation & Initialization*  
+  - *Arithmetic Operations*  
+  - *Broadcasting Logic*  
+  - *Reduction & Aggregation*  
+  - *Operations with scalar*
+
+> StaticTensor is covered by a separate test suite in [`tests/static_tensor_test.cpp`](../../tests/static_tensor_test.cpp)   (work in progress).
 
 > *"A Persona's power is meaningless without the skill to wield it."*
 

@@ -2,19 +2,19 @@
 
 #include <algorithm>
 #include <memory>
-#include <random>
 #include <stdexcept>
 #include <concepts>
 
 #include "arcana/tensor/tensor_base.hpp"
 #include "arcana/tensor/tensor_methods.hpp"
 #include "arcana/tensor/tensor_operations.hpp"
-#include "arcana/pcg_random.hpp"
+#include "arcana/tensor/tensor_arithmetic.hpp"
+#include "arcana/tensor/tensor_generators.hpp"
 
 namespace arcana::tensor
 {
     template <Numeric T>
-    class Tensor : public TensorBase<Tensor<T>>, public TensorMethods<Tensor<T>>
+    class Tensor : public TensorBase<Tensor<T>>, public TensorMethods<Tensor<T>>, public ArithmeticMixin<Tensor<T>, T>
     {
     public:
         using scalar_type = T;
@@ -24,7 +24,8 @@ namespace arcana::tensor
         Tensor() : m_data(nullptr), m_size(0) {}
 
         template <typename... Dims>
-        Tensor(Dims... dims) : m_shape{static_cast<size_t>(dims)...}, m_offset(0)
+            requires((std::is_integral_v<Dims> && ...))
+        explicit Tensor(Dims... dims) : m_shape{static_cast<size_t>(dims)...}, m_offset(0)
         {
             compute_size_and_strides();
             m_storage = std::shared_ptr<T[]>(new T[m_size]());
@@ -112,7 +113,7 @@ namespace arcana::tensor
         static Tensor zeros(const std::vector<size_t> &shape)
         {
             Tensor result(shape);
-            std::fill_n(result.m_data, result.m_size, T(0));
+            gen::fill_(result, T(0));
             return result;
         }
 
@@ -132,7 +133,7 @@ namespace arcana::tensor
         static Tensor ones(const std::vector<size_t> &shape)
         {
             Tensor result(shape);
-            std::fill_n(result.m_data, result.m_size, T(1));
+            gen::fill_(result, T(1));
             return result;
         }
 
@@ -149,43 +150,43 @@ namespace arcana::tensor
         }
 
         // --- RANDN ---
-        static Tensor randn(const std::vector<size_t> &shape, T mean = 0, T stddev = 1, uint64_t seed = 0)
+        static Tensor randn(const std::vector<size_t> &shape, T mean = 0, T stddev = 1)
         {
             Tensor result(shape);
-            result.randn_(mean, stddev, seed);
+            gen::fill_randn(result, mean, stddev);
             return result;
         }
 
-        static Tensor randn(std::initializer_list<size_t> shape, T mean = 0, T stddev = 1, uint64_t seed = 0)
+        static Tensor randn(std::initializer_list<size_t> shape, T mean = 0, T stddev = 1)
         {
-            return randn(std::vector<size_t>(shape), mean, stddev, seed);
+            return randn(std::vector<size_t>(shape), mean, stddev);
         }
 
         template <typename... Dims>
             requires(std::is_integral_v<Dims> && ...)
         static Tensor randn(Dims... dims)
         {
-            return randn({static_cast<size_t>(dims)...}, T(0), T(1), 0);
+            return randn({static_cast<size_t>(dims)...}, T(0), T(1));
         }
 
         // --- UNIFORM ---
-        static Tensor uniform(const std::vector<size_t> &shape, T min = 0, T max = 1, uint64_t seed = 0)
+        static Tensor uniform(const std::vector<size_t> &shape, T min = 0, T max = 1)
         {
             Tensor result(shape);
-            result.uniform_(min, max, seed);
+            gen::fill_uniform(result, min, max);
             return result;
         }
 
-        static Tensor uniform(std::initializer_list<size_t> shape, T min = 0, T max = 1, uint64_t seed = 0)
+        static Tensor uniform(std::initializer_list<size_t> shape, T min = 0, T max = 1)
         {
-            return uniform(std::vector<size_t>(shape), min, max, seed);
+            return uniform(std::vector<size_t>(shape), min, max);
         }
 
         template <typename... Dims>
             requires(std::is_integral_v<Dims> && ...)
         static Tensor uniform(Dims... dims)
         {
-            return uniform({static_cast<size_t>(dims)...}, T(0), T(1), 0);
+            return uniform({static_cast<size_t>(dims)...}, T(0), T(1));
         }
 
         // ============ FACTORY _LIKE METHODS ============
@@ -218,60 +219,6 @@ namespace arcana::tensor
         const T &operator()(Indices... indices) const
         {
             return m_data[compute_offset({static_cast<size_t>(indices)...})];
-        }
-
-        // ============ TENSOR ARITHMETIC ============
-
-        Tensor operator+(const Tensor &other) const
-        {
-            if (m_shape != other.m_shape)
-            {
-                throw std::runtime_error("Shape mismatch");
-            }
-
-            Tensor result(m_shape);
-            arcana::tensor::AddOp<T> op(m_data, other.m_data, result.m_data, m_size);
-            op.execute();
-            return result;
-        }
-
-        Tensor operator-(const Tensor &other) const
-        {
-            if (m_shape != other.m_shape)
-            {
-                throw std::runtime_error("Shape mismatch");
-            }
-
-            Tensor result(m_shape);
-            arcana::tensor::SubOp<T> op(m_data, other.m_data, result.m_data, m_size);
-            op.execute();
-            return result;
-        }
-
-        Tensor operator*(const Tensor &other) const
-        {
-            if (m_shape != other.m_shape)
-            {
-                throw std::runtime_error("Shape mismatch");
-            }
-
-            Tensor result(m_shape);
-            arcana::tensor::MulOp<T> op(m_data, other.m_data, result.m_data, m_size);
-            op.execute();
-            return result;
-        }
-
-        Tensor operator/(const Tensor &other) const
-        {
-            if (m_shape != other.m_shape)
-            {
-                throw std::runtime_error("Shape mismatch");
-            }
-
-            Tensor result(m_shape);
-            arcana::tensor::DivOp<T> op(m_data, other.m_data, result.m_data, m_size);
-            op.execute();
-            return result;
         }
 
         Tensor matmul(const Tensor &other) const
@@ -336,124 +283,6 @@ namespace arcana::tensor
 
         // Alias
         Tensor mm(const Tensor &other) const { return matmul(other); }
-
-        // ============ IN-PLACE TENSOR ARITHMETIC ============
-
-        Tensor &operator+=(const Tensor &other)
-        {
-            if (m_shape != other.m_shape)
-            {
-                throw std::runtime_error("Shape mismatch");
-            }
-
-            for (size_t i = 0; i < m_size; ++i)
-                m_data[i] += other.m_data[i];
-
-            return *this;
-        }
-
-        Tensor &operator-=(const Tensor &other)
-        {
-            if (m_shape != other.m_shape)
-            {
-                throw std::runtime_error("Shape mismatch");
-            }
-
-            for (size_t i = 0; i < m_size; ++i)
-                m_data[i] -= other.m_data[i];
-
-            return *this;
-        }
-
-        Tensor &operator*=(const Tensor &other)
-        {
-            if (m_shape != other.m_shape)
-            {
-                throw std::runtime_error("Shape mismatch");
-            }
-
-            for (size_t i = 0; i < m_size; ++i)
-                m_data[i] *= other.m_data[i];
-
-            return *this;
-        }
-
-        Tensor &operator/=(const Tensor &other)
-        {
-            if (m_shape != other.m_shape)
-            {
-                throw std::runtime_error("Shape mismatch");
-            }
-
-            for (size_t i = 0; i < m_size; ++i)
-                m_data[i] /= other.m_data[i];
-
-            return *this;
-        }
-
-        // ============ SCALAR ARITHMETIC ============
-
-        Tensor operator+(T scalar) const
-        {
-            Tensor result(m_shape);
-            for (size_t i = 0; i < m_size; ++i)
-                result.m_data[i] = m_data[i] + scalar;
-            return result;
-        }
-
-        Tensor operator-(T scalar) const
-        {
-            Tensor result(m_shape);
-            for (size_t i = 0; i < m_size; ++i)
-                result.m_data[i] = m_data[i] - scalar;
-            return result;
-        }
-
-        Tensor operator*(T scalar) const
-        {
-            Tensor result(m_shape);
-            for (size_t i = 0; i < m_size; ++i)
-                result.m_data[i] = m_data[i] * scalar;
-            return result;
-        }
-
-        Tensor operator/(T scalar) const
-        {
-            Tensor result(m_shape);
-            for (size_t i = 0; i < m_size; ++i)
-                result.m_data[i] = m_data[i] / scalar;
-            return result;
-        }
-
-        // ============ IN-PLACE SCALAR ARITHMETIC ============
-
-        Tensor &operator+=(T scalar)
-        {
-            for (size_t i = 0; i < m_size; ++i)
-                m_data[i] += scalar;
-            return *this;
-        }
-
-        Tensor &operator-=(T scalar)
-        {
-            for (size_t i = 0; i < m_size; ++i)
-                m_data[i] -= scalar;
-            return *this;
-        }
-
-        Tensor &operator*=(T scalar)
-        {
-            for (size_t i = 0; i < m_size; ++i)
-                m_data[i] *= scalar;
-            return *this;
-        }
-
-        Tensor &operator/=(T scalar)
-        {
-            for (size_t i = 0; i < m_size; ++i)
-                m_data[i] /= scalar;
-            return *this;
-        }
 
         // ============ SHAPE OPERATIONS ============
 
@@ -738,13 +567,13 @@ namespace arcana::tensor
 
         Tensor &zero_()
         {
-            std::fill_n(m_data, m_size, T(0));
+            gen::fill_(*this, T(0));
             return *this;
         }
 
         Tensor &ones_()
         {
-            std::fill_n(m_data, m_size, T(1));
+            gen::fill_(*this, T(1));
             return *this;
         }
 
@@ -754,33 +583,15 @@ namespace arcana::tensor
             return *this;
         }
 
-        Tensor &randn_(T mean = 0, T stddev = 1, uint64_t seed = 0)
+        Tensor &randn_(T mean = 0, T stddev = 1)
         {
-            if (seed == 0)
-            {
-                std::random_device rd;
-                seed = rd();
-            }
-            pcg32 gen(seed);
-            std::normal_distribution<T> dis(mean, stddev);
-
-            for (size_t i = 0; i < m_size; ++i)
-                m_data[i] = dis(gen);
+            gen::fill_randn(*this, mean, stddev);
             return *this;
         }
 
-        Tensor &uniform_(T min = 0, T max = 1, uint64_t seed = 0)
+        Tensor &uniform_(T min = 0, T max = 1)
         {
-            if (seed == 0)
-            {
-                std::random_device rd;
-                seed = rd();
-            }
-            pcg32 gen(seed);
-            std::uniform_real_distribution<T> dis(min, max);
-
-            for (size_t i = 0; i < m_size; ++i)
-                m_data[i] = dis(gen);
+            gen::fill_uniform(*this, min, max);
             return *this;
         }
 
