@@ -2,16 +2,187 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <omp.h>
+#include <stdexcept>
+#include <vector>
 
 namespace arcana::tensor
 {
+    // ==================================================================
+    // 1. Element-Wise Methods (SAFE for static tensors)
+    //    Operations, that dont change the shape of a tensor (exp, relu, normalize...)
+    // ==================================================================
     template <typename Derived>
-    class TensorMethods
+    class ElementWiseMethods
     {
     public:
-        // ============ REDUCTION OPERATIONS ============
+        // --- Immutable (return copy) ---
 
+        [[nodiscard]] Derived exp() const
+        {
+            const Derived &self = static_cast<const Derived &>(*this);
+            Derived result = Derived::empty_like(self);
+
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                result.data()[i] = std::exp(self.data()[i]);
+
+            return result;
+        }
+
+        [[nodiscard]] Derived log() const
+        {
+            const Derived &self = static_cast<const Derived &>(*this);
+            Derived result = Derived::empty_like(self);
+
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                result.data()[i] = std::log(self.data()[i]);
+
+            return result;
+        }
+
+        template <typename T>
+        [[nodiscard]] Derived pow(T exponent) const
+        {
+            const Derived &self = static_cast<const Derived &>(*this);
+            Derived result = Derived::empty_like(self);
+
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                result.data()[i] = std::pow(self.data()[i], exponent);
+
+            return result;
+        }
+
+        [[nodiscard]] Derived sqrt() const
+        {
+            const Derived &self = static_cast<const Derived &>(*this);
+            Derived result = Derived::empty_like(self);
+
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                result.data()[i] = std::sqrt(self.data()[i]);
+
+            return result;
+        }
+
+        // --- Activation Functions ---
+
+        [[nodiscard]] Derived relu() const
+        {
+            const Derived &self = static_cast<const Derived &>(*this);
+            Derived result = Derived::empty_like(self);
+
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                result.data()[i] = std::max(typename Derived::scalar_type(0), self.data()[i]);
+
+            return result;
+        }
+
+        [[nodiscard]] Derived sigmoid() const
+        {
+            const Derived &self = static_cast<const Derived &>(*this);
+            Derived result = Derived::empty_like(self);
+
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                result.data()[i] = typename Derived::scalar_type(1) /
+                                   (typename Derived::scalar_type(1) + std::exp(-self.data()[i]));
+
+            return result;
+        }
+
+        [[nodiscard]] Derived tanh() const
+        {
+            const Derived &self = static_cast<const Derived &>(*this);
+            Derived result = Derived::empty_like(self);
+
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                result.data()[i] = std::tanh(self.data()[i]);
+
+            return result;
+        }
+
+        // --- Mutable (In-Place) ---
+
+        Derived &exp_()
+        {
+            Derived &self = static_cast<Derived &>(*this);
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                self.data()[i] = std::exp(self.data()[i]);
+            return self;
+        }
+
+        Derived &log_()
+        {
+            Derived &self = static_cast<Derived &>(*this);
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                self.data()[i] = std::log(self.data()[i]);
+            return self;
+        }
+
+        template <typename T>
+        Derived &pow_(T exponent)
+        {
+            Derived &self = static_cast<Derived &>(*this);
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                self.data()[i] = std::pow(self.data()[i], exponent);
+            return self;
+        }
+
+        Derived &sqrt_()
+        {
+            Derived &self = static_cast<Derived &>(*this);
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                self.data()[i] = std::sqrt(self.data()[i]);
+            return self;
+        }
+
+        Derived &relu_()
+        {
+            Derived &self = static_cast<Derived &>(*this);
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                self.data()[i] = std::max(typename Derived::scalar_type(0), self.data()[i]);
+            return self;
+        }
+
+        Derived &sigmoid_()
+        {
+            Derived &self = static_cast<Derived &>(*this);
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                self.data()[i] = typename Derived::scalar_type(1) /
+                                 (typename Derived::scalar_type(1) + std::exp(-self.data()[i]));
+            return self;
+        }
+
+        Derived &tanh_()
+        {
+            Derived &self = static_cast<Derived &>(*this);
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                self.data()[i] = std::tanh(self.data()[i]);
+            return self;
+        }
+    };
+
+    // ==================================================================
+    // 2. Global Reduction Methods (SAFE for static tensors)
+    //    Operations that return a scalar (sum, mean, max...)
+    // ==================================================================
+    template <typename Derived>
+    class GlobalReductionMethods
+    {
+    public:
         [[nodiscard]] auto mean() const
         {
             const Derived &self = static_cast<const Derived &>(*this);
@@ -81,7 +252,7 @@ namespace arcana::tensor
             const Derived &self = static_cast<const Derived &>(*this);
 
             if (self.size() == 0)
-                throw std::runtime_error("Cannot compute argmin of empty tensor");
+                throw std::runtime_error("Cannot compute argmax of empty tensor");
 
             size_t max_index = 0;
             typename Derived::scalar_type max_value = self.data()[0];
@@ -152,8 +323,35 @@ namespace arcana::tensor
             return min_index;
         }
 
-        // ============ REDUCTION OPERATION (dim versions) ============
+        Derived &normalize()
+        {
+            Derived &self = static_cast<Derived &>(*this);
 
+            if (self.size() == 0)
+                return self;
+
+            auto m = mean();
+            auto s = stddev();
+
+            if (s == 0)
+                return self;
+
+#pragma omp parallel for simd
+            for (size_t i = 0; i < self.size(); ++i)
+                self.data()[i] = (self.data()[i] - m) / s;
+
+            return self;
+        }
+    };
+
+    // ==================================================================
+    // 3. Dimension Reduction Methods (DANGEROUS for static tensors)
+    //    Operations that dynamically change the shape of a tensor (sum(dim)...)
+    // ==================================================================
+    template <typename Derived>
+    class DimReductionMethods
+    {
+    public:
         [[nodiscard]] auto sum(int dim) const
         {
             const Derived &self = static_cast<const Derived &>(*this);
@@ -447,198 +645,34 @@ namespace arcana::tensor
 
             return result;
         }
-
-        // ============ ELEMENT-WISE OPERATIONS (immutable) ============
-
-        [[nodiscard]] Derived exp() const
-        {
-            const Derived &self = static_cast<const Derived &>(*this);
-            Derived result = Derived::empty_like(self);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                result.data()[i] = std::exp(self.data()[i]);
-
-            return result;
-        }
-
-        [[nodiscard]] Derived log() const
-        {
-            const Derived &self = static_cast<const Derived &>(*this);
-            Derived result = Derived::empty_like(self);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                result.data()[i] = std::log(self.data()[i]);
-
-            return result;
-        }
-
-        template <typename T>
-        [[nodiscard]] Derived pow(T exponent) const
-        {
-            const Derived &self = static_cast<const Derived &>(*this);
-            Derived result = Derived::empty_like(self);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                result.data()[i] = std::pow(self.data()[i], exponent);
-
-            return result;
-        }
-
-        [[nodiscard]] Derived sqrt() const
-        {
-            const Derived &self = static_cast<const Derived &>(*this);
-            Derived result = Derived::empty_like(self);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                result.data()[i] = std::sqrt(self.data()[i]);
-
-            return result;
-        }
-
-        // ============ IN-PLACE OPERATIONS ============
-
-        Derived &exp_()
-        {
-            Derived &self = static_cast<Derived &>(*this);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                self.data()[i] = std::exp(self.data()[i]);
-
-            return self;
-        }
-
-        Derived &log_()
-        {
-            Derived &self = static_cast<Derived &>(*this);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                self.data()[i] = std::log(self.data()[i]);
-
-            return self;
-        }
-
-        template <typename T>
-        Derived &pow_(T exponent)
-        {
-            Derived &self = static_cast<Derived &>(*this);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                self.data()[i] = std::pow(self.data()[i], exponent);
-
-            return self;
-        }
-
-        Derived &sqrt_()
-        {
-            Derived &self = static_cast<Derived &>(*this);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                self.data()[i] = std::sqrt(self.data()[i]);
-
-            return self;
-        }
-
-        // ============ ACTIVATION FUNCTIONS ============
-
-        [[nodiscard]] Derived relu() const
-        {
-            const Derived &self = static_cast<const Derived &>(*this);
-            Derived result = Derived::empty_like(self);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                result.data()[i] = std::max(typename Derived::scalar_type(0), self.data()[i]);
-
-            return result;
-        }
-
-        [[nodiscard]] Derived sigmoid() const
-        {
-            const Derived &self = static_cast<const Derived &>(*this);
-            Derived result = Derived::empty_like(self);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                result.data()[i] = typename Derived::scalar_type(1) /
-                                   (typename Derived::scalar_type(1) + std::exp(-self.data()[i]));
-
-            return result;
-        }
-
-        [[nodiscard]] Derived tanh() const
-        {
-            const Derived &self = static_cast<const Derived &>(*this);
-            Derived result = Derived::empty_like(self);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                result.data()[i] = std::tanh(self.data()[i]);
-
-            return result;
-        }
-
-        Derived &relu_()
-        {
-            Derived &self = static_cast<Derived &>(*this);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                self.data()[i] = std::max(typename Derived::scalar_type(0), self.data()[i]);
-
-            return self;
-        }
-
-        Derived &sigmoid_()
-        {
-            Derived &self = static_cast<Derived &>(*this);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                self.data()[i] = typename Derived::scalar_type(1) /
-                                 (typename Derived::scalar_type(1) + std::exp(-self.data()[i]));
-
-            return self;
-        }
-
-        Derived &tanh_()
-        {
-            Derived &self = static_cast<Derived &>(*this);
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                self.data()[i] = std::tanh(self.data()[i]);
-
-            return self;
-        }
-
-        // ============ NORMALIZE ============
-
-        Derived &normalize()
-        {
-            Derived &self = static_cast<Derived &>(*this);
-
-            if (self.size() == 0)
-                return self;
-
-            auto m = mean();
-            auto s = stddev();
-
-            if (s == 0)
-                return self;
-
-#pragma omp parallel for simd
-            for (size_t i = 0; i < self.size(); ++i)
-                self.data()[i] = (self.data()[i] - m) / s;
-
-            return self;
-        }
     };
-}
+
+    // ==================================================================
+    // 4. Unified Interface for dynamic tensor
+    // ==================================================================
+    template <typename Derived>
+    class TensorMethods : public ElementWiseMethods<Derived>,
+                          public GlobalReductionMethods<Derived>,
+                          public DimReductionMethods<Derived>
+    {
+    public:
+        using GlobalReductionMethods<Derived>::mean;
+        using DimReductionMethods<Derived>::mean;
+
+        using GlobalReductionMethods<Derived>::sum;
+        using DimReductionMethods<Derived>::sum;
+
+        using GlobalReductionMethods<Derived>::max;
+        using DimReductionMethods<Derived>::max;
+
+        using GlobalReductionMethods<Derived>::min;
+        using DimReductionMethods<Derived>::min;
+
+        using GlobalReductionMethods<Derived>::argmax;
+        using DimReductionMethods<Derived>::argmax;
+
+        using GlobalReductionMethods<Derived>::argmin;
+        using DimReductionMethods<Derived>::argmin;
+    };
+
+} // namespace arcana::tensor
